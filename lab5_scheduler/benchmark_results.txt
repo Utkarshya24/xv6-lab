@@ -1,0 +1,35 @@
+================================
+CPU Scheduling Hardware Benchmark
+================================
+
+CPU count:
+2
+
+CPU topology:
+CPU(s):                                  2
+On-line CPU(s) list:                     0,1
+Model name:                              AMD EPYC 7763 64-Core Processor
+Thread(s) per core:                      2
+Core(s) per socket:                      1
+Socket(s):                               1
+NUMA node(s):                            1
+NUMA node0 CPU(s):                       0,1
+
+NUMA topology:
+available: 1 nodes (0)
+node 0 cpus: 0 1
+node 0 size: 7942 MB
+node 0 free: 166 MB
+node distances:
+node   0 
+  0:  10 
+
+Normal execution:
+
+Pinned to CPU 0:
+
+Pinned to CPU 1:
+
+Pinned to CPUs 0-1:
+
+Benchmark complete.
