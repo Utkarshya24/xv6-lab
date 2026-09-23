@@ -130,3 +130,25 @@ sys_cpustats(void)
     return -1;
   return 0;
 }
+
+#define NQUEUE 3
+
+uint64
+sys_setpriority(void)
+{
+  int prio;
+  
+  // argint void return karta hai, isliye ise direct call karo
+  argint(0, &prio);
+
+  if(prio < 0 || prio >= NQUEUE)
+    return -1;
+
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->priority = prio;
+  p->queue = prio;
+  release(&p->lock);
+
+  return 0;
+}

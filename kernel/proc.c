@@ -125,6 +125,11 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
+  p->priority = 1;
+  p->queue = 0;
+  p->quantum_used = 0;
+  p->ctime = ticks;
+
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
     freeproc(p);
@@ -145,7 +150,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  p->ctime = ticks;
   return p;
 }
 
@@ -354,6 +359,8 @@ kexit(int status)
 
   acquire(&p->lock);
 
+  p->etime = ticks;
+
   p->xstate = status;
   p->state = ZOMBIE;
 
@@ -387,6 +394,8 @@ kwait(uint64 addr)
         if (pp->state == ZOMBIE) {
           // Found one.
           pid = pp->pid;
+          int turnaround = pp->etime - pp->ctime;
+          printk("pid %d turnaround %d ticks\n", pp->pid, turnaround);
           if (addr != 0 &&
               copyout(p->pagetable, p->sz, addr, (char *)&pp->xstate,
                       sizeof(pp->xstate)) < 0) {
@@ -425,45 +434,59 @@ kwait(uint64 addr)
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
+#define NQUEUE 3
+static int quantum[NQUEUE] = {2, 4, 8};
+
 void
 scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
+  int q;
 
   c->proc = 0;
-  for (;;) {
-    // The most recent process to run may have had interrupts
-    // turned off; enable them to avoid a deadlock if all
-    // processes are waiting. Then turn them back off
-    // to avoid a possible race between an interrupt
-    // and wfi.
+  for (;;){
     intr_on();
     intr_off();
 
     int found = 0;
-    for (p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if (p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
 
-        // Don't re-enable interrupts on release.
-        mycpu()->intena = 0;
+    // Scan queues from high priority (0) to low priority (NQUEUE - 1)
+    for (q = 0; q < NQUEUE; q++) {
+      for (p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        
+        // Check if process is runnable and belongs to current queue band
+        if (p->state == RUNNABLE && p->queue == q) {
+          p->state = RUNNING;
+          c->proc = p;
+          
+          // Run the process context switch
+          swtch(&c->context, &p->context);
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
+          mycpu()->intena = 0;
+          c->proc = 0;
+          found = 1;
+
+          // Increment quantum ticks used in this slice
+          p->quantum_used++;
+          
+          // Demotion logic: if quantum exhausted and not in the lowest queue
+          if (p->quantum_used >= quantum[q] && p->queue < NQUEUE - 1) {
+            p->queue++;         // Demote to next lower queue band[cite: 1]
+            p->quantum_used = 0; // Reset quantum counter for the new queue
+          }
+
+          release(&p->lock);
+          break; // Break process loop to restart scan from Queue 0[cite: 1]
+        }
+        release(&p->lock);
       }
-      release(&p->lock);
+      if (found)
+        break; // Restart queue loop from q = 0 if a process ran
     }
+
     if (found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
       asm volatile("wfi");
     }
   }

@@ -101,4 +101,10 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  int priority;        // 0 = highest priority
+  int queue;           // MLQ band index
+  int quantum_used;    // ticks used this slice
+  int ctime;           // creation tick
+  int etime;           // completion tick
 };

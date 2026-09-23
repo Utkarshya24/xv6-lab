@@ -23,3 +23,4 @@
 #define SYS_sync   22
 #define SYS_mycall 23
 #define SYS_cpustats 24
+#define SYS_setpriority 26
